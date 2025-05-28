@@ -10,9 +10,9 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.database import Base  # Tu declarative base
+from app.core.database import Base  # Tu declarative base
 from app.models import *  # importa todos los modelos aquí
-from app.config import settings
+from app.core.config import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

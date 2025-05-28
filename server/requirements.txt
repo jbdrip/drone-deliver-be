@@ -8,7 +8,7 @@ alembic==1.12.1
 psycopg[binary]==3.2.9
 
 # Validación de datos
-pydantic==2.8.0
+pydantic[email]==2.8.0
 pydantic-settings==2.1.0
 
 # Seguridad y autenticación

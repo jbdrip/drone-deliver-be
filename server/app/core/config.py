@@ -14,9 +14,11 @@ class Settings(BaseSettings):
     DATABASE_TEST_URL: Optional[str] = None
     
     # Seguridad
-    SECRET_KEY: str
-    ALGORITHM: str = "HS256"
+    JWT_SECRET_KEY: str
+    JWT_REFRESH_SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ALGORITHM: str = "HS256"
     
     # CORS - Puede ser string JSON o lista
     CORS_ORIGINS: Union[List[str], str] = '["http://localhost:3000", "http://127.0.0.1:3000"]'

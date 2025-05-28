@@ -4,7 +4,7 @@ import enum
 from sqlalchemy import Column, String, DateTime, ForeignKey, DECIMAL, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from app.database import Base
+from app.core.database import Base
 
 class TransactionTypeEnum(str, enum.Enum):
     credit = "credit"

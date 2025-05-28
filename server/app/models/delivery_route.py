@@ -4,7 +4,7 @@ import enum
 from sqlalchemy import Column, Integer, DateTime, ForeignKey, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from app.database import Base
+from app.core.database import Base
 
 class RouteTypeEnum(str, enum.Enum):
     pickup = "pickup"

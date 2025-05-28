@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
-from app.database import engine, Base
+from app.core.config import settings
+from app.core.database import engine, Base
 import logging
 
 # Configurar logging
@@ -43,8 +43,9 @@ async def health_check():
     }
 
 # Incluir rutas de la API cuando estén listas
-# from app.api.v1.api import api_router
-# app.include_router(api_router, prefix="/api/v1")
+from app.api.v1 import api_router
+
+app.include_router(api_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn

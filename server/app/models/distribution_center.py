@@ -4,7 +4,7 @@ import enum
 from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, Enum, DECIMAL
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from app.database import Base
+from app.core.database import Base
 
 class CenterTypeEnum(str, enum.Enum):
     main_warehouse = "main_warehouse"
