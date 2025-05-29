@@ -50,14 +50,21 @@ def get_customers(db: Session, skip: int = 0, limit: int = 100, search: str = ""
             )
 
         )
+        
+    # Obtener el total antes de aplicar paginación
+    total = query.count()
 
+    # Aplicar paginación después de obtener el conteo
     customers = query.offset(skip).limit(limit).all()
     customer_list = [CustomerOut.from_orm(customer) for customer in customers]
 
     return ApiResponse(
         status="success",
         message="Lista de clientes obtenida",
-        data=customer_list
+        data={
+            "customers": customer_list,
+            "total": total
+        }
     )
 
 def update_customer(db: Session, customer_id: str, customer_in: CustomerUpdate) -> ApiResponse:

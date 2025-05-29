@@ -27,7 +27,7 @@ def create_user(db: Session, user_in: UserCreate) -> ApiResponse:
 
 def get_users(db: Session, skip: int = 0, limit: int = 100, search: str = "") -> ApiResponse:
     query = db.query(User)
-
+     
     if search:
         search_term = f"%{search.lower()}%"
         query = query.filter(
@@ -36,12 +36,21 @@ def get_users(db: Session, skip: int = 0, limit: int = 100, search: str = "") ->
                 User.full_name.ilike(search_term)
             )
         )
+    
+    # Obtener el total ANTES de aplicar paginación
+    total = query.count()
+    
+    # Aplicar paginación DESPUÉS de obtener el conteo
     users = query.offset(skip).limit(limit).all()
     user_list = [UserOut.from_orm(user) for user in users]
+         
     return ApiResponse(
         status="success",
         message="Lista de usuarios obtenida",
-        data=user_list
+        data={
+            "users": user_list,
+            "total": total
+        }   
     )
 
 def update_user(db: Session, user_id: str, user_in: UserUpdate) -> ApiResponse:
