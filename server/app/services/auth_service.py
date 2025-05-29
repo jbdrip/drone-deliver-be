@@ -5,6 +5,7 @@ from datetime import timedelta
 from app.models import User
 from app.schemas.api import ApiResponse
 from app.schemas.auth import Token
+from app.schemas.user import UserOut
 from app.core.security import (
     verify_password, create_access_token, create_refresh_token
 )
@@ -17,9 +18,10 @@ def authenticate_user(db: Session, email: str, password: str) -> ApiResponse:
 
     access_token = create_access_token({"sub": str(user.id)})
     refresh_token = create_refresh_token({"sub": str(user.id)})
-    token: Token = {
+    token: dict = {
         "access_token": access_token,
-        "refresh_token": refresh_token
+        "refresh_token": refresh_token,
+        "user_data": UserOut.from_orm(user)
     }
     return ApiResponse(status="success", message="Usuario autenticado", data=token)
 
