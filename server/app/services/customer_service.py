@@ -40,15 +40,13 @@ def get_customers(db: Session, skip: int = 0, limit: int = 100, search: str = ""
 
     if search:
         search_term = f"%{search.lower()}%"
-        query = query.filter(
-            
+        query = query.filter( 
             or_(
                 Customer.email.ilike(search_term),
                 Customer.full_name.ilike(search_term),
                 Customer.phone.ilike(search_term),
                 Customer.address.ilike(search_term)
             )
-
         )
         
     # Obtener el total antes de aplicar paginación
