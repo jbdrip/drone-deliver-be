@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import HTTPException
-from app.models import User
+from app.models.user import User
 from app.schemas.api import ApiResponse
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.core.security import hash_password
@@ -24,9 +24,6 @@ def create_user(db: Session, user_in: UserCreate) -> ApiResponse:
         message="Usuario creado exitosamente",
         data=UserOut.from_orm(user)
     )
-
-def get_user_by_id(db: Session, user_id: str):
-    return db.query(User).filter(User.id == user_id).first()
 
 def get_users(db: Session, skip: int = 0, limit: int = 100, search: str = "") -> ApiResponse:
     query = db.query(User)
