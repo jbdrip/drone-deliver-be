@@ -36,17 +36,19 @@ def create_customer(db: Session, customer_in: CustomerCreate) -> ApiResponse:
     )
 
 def get_customers(db: Session, skip: int = 0, limit: int = 100, search: str = "") -> ApiResponse:
-    query = db.query(Customer)
+    query = db.query(Customer).filter(Customer.is_active == True)
 
     if search:
         search_term = f"%{search.lower()}%"
         query = query.filter(
+            
             or_(
                 Customer.email.ilike(search_term),
                 Customer.full_name.ilike(search_term),
                 Customer.phone.ilike(search_term),
                 Customer.address.ilike(search_term)
             )
+
         )
 
     customers = query.offset(skip).limit(limit).all()
