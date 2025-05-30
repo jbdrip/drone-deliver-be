@@ -6,7 +6,10 @@ from app.schemas.api import ApiResponse
 from app.schemas.customer import CustomerCreate, CustomerUpdate, CustomerOut
 
 def create_customer(db: Session, customer_in: CustomerCreate) -> ApiResponse:
-    exists = db.query(Customer).filter(Customer.email == customer_in.email).first()
+    exists = db.query(Customer).filter(
+        Customer.email == customer_in.email,
+        Customer.is_active == True
+    ).first()
     if exists:
         raise HTTPException(status_code=400, detail="El cliente ya existe")
     

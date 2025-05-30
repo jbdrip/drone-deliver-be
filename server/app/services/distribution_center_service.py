@@ -7,13 +7,14 @@ from app.schemas.distribution_center import DistributionCenterCreate, Distributi
 
 def create_distribution_center(db: Session, distribution_center_in: DistributionCenterCreate) -> ApiResponse:
     exists = db.query(DistributionCenter).filter(
-      or_(
-        DistributionCenter.name.ilike(distribution_center_in.name),
-        and_(
-          DistributionCenter.latitude == distribution_center_in.latitude,
-          DistributionCenter.longitude == distribution_center_in.longitude
+        DistributionCenter.is_active == True,
+        or_(
+            DistributionCenter.name.ilike(distribution_center_in.name),
+            and_(
+                DistributionCenter.latitude == distribution_center_in.latitude,
+                DistributionCenter.longitude == distribution_center_in.longitude
+            )
         )
-      )
     ).first()
     if exists:
         raise HTTPException(status_code=400, detail="Ya existe una central de distribución con el mismo nombre o ubicación")
