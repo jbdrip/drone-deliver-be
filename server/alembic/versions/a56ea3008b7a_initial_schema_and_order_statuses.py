@@ -1,8 +1,8 @@
 """Initial schema and order statuses
 
-Revision ID: 18e769ba904a
+Revision ID: a56ea3008b7a
 Revises: 
-Create Date: 2025-05-26 21:49:09.813729
+Create Date: 2025-06-02 07:57:39.753272
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '18e769ba904a'
+revision: str = 'a56ea3008b7a'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -72,6 +72,7 @@ def upgrade() -> None:
     sa.Column('email', sa.String(length=255), nullable=False),
     sa.Column('password_hash', sa.String(length=255), nullable=False),
     sa.Column('full_name', sa.String(length=300), nullable=False),
+    sa.Column('role', sa.Enum('admin', 'customer', name='roleenum'), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(), server_default=sa.text('now()'), nullable=True),
@@ -132,7 +133,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
-    
+
     # Datos iniciales: order_statuses
     op.execute("""
         INSERT INTO order_statuses (id, status_name, description) VALUES
