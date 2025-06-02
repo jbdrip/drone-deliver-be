@@ -1,7 +1,6 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
-from datetime import timedelta
 from app.models import User
 from app.schemas.api import ApiResponse
 from app.schemas.auth import Token

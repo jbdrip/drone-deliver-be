@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import HTTPException
-from app.models.user import User
+from app.models.user import User, RoleEnum
 from app.schemas.api import ApiResponse
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.core.security import hash_password
@@ -10,15 +10,20 @@ def create_user(db: Session, user_in: UserCreate) -> ApiResponse:
     exists = db.query(User).filter(User.email == user_in.email).first()
     if exists:
         raise HTTPException(status_code=400, detail="El usuario ya existe")
+    
+    if user_in.role not in [e.value for e in RoleEnum]:
+        raise HTTPException(status_code=400, detail="Rol de usuario no válido")
 
     user = User(
         email=user_in.email,
         full_name=user_in.full_name,
-        password_hash=hash_password(user_in.password)
+        password_hash=hash_password(user_in.password),
+        role=user_in.role
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    
     return ApiResponse(
         status="success",
         message="Usuario creado exitosamente",

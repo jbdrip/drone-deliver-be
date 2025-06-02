@@ -6,11 +6,13 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: str
+    role: str # Should match RoleEnum in the model
 
 class UserOut(BaseModel):
     id: UUID
     email: EmailStr
     full_name: str
+    role: str  # Should match RoleEnum in the model
     is_active: bool
     created_at: datetime
 
