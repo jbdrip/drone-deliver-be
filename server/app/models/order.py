@@ -1,6 +1,6 @@
 # app/models/order.py
 import uuid
-from sqlalchemy import Column, Integer, DateTime, ForeignKey, Text, DECIMAL
+from sqlalchemy import Column, Integer, DateTime, ForeignKey, Text, DECIMAL, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -19,6 +19,7 @@ class Order(Base):
     product_cost = Column(DECIMAL(10, 2))
     total_cost = Column(DECIMAL(10, 2))
     estimated_delivery_time = Column(Integer)
+    delivery_route = Column(JSON)
     cancellation_reason = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

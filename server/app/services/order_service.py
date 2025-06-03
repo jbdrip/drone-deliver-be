@@ -275,6 +275,20 @@ def create_order(db: Session, order_in: OrderCreate, user_email: str) -> ApiResp
     
     # Crear información de la ruta para logs/debugging
     route_info = " -> ".join([center.name for center in delivery_route]) + f" -> Cliente"
+    delivery_route_map = [
+        {
+            "center_id": str(center.id),
+            "center_name": center.name,
+            "latitude": float(center.latitude),
+            "longitude": float(center.longitude)
+        } for center in delivery_route
+    ]
+    delivery_route_map.append({
+        "center_id": "customer",
+        "center_name": "Cliente",
+        "latitude": float(customer.latitude),
+        "longitude": float(customer.longitude)
+    })
     
     # Crear el pedido
     order = Order(
@@ -288,8 +302,7 @@ def create_order(db: Session, order_in: OrderCreate, user_email: str) -> ApiResp
         product_cost=round(product_cost, 2),
         total_cost=round(product_cost + service_cost, 2),
         estimated_delivery_time=estimated_delivery_time,
-        # Opcional: agregar campo para guardar la ruta si lo tienes en tu modelo
-        # delivery_route=route_info
+        delivery_route=delivery_route_map
     )
     
     db.add(order)
