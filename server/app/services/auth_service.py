@@ -15,8 +15,8 @@ def authenticate_user(db: Session, email: str, password: str) -> ApiResponse:
     if not user or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-    access_token = create_access_token({"sub": str(user.id)})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
+    access_token = create_access_token({"sub": str(user.id), "role": user.role})
+    refresh_token = create_refresh_token({"sub": str(user.id), "role": user.role})
     token: dict = {
         "access_token": access_token,
         "refresh_token": refresh_token,

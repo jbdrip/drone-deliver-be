@@ -1,4 +1,4 @@
-from .distribution_center import DistributionCenter
+from .distribution_center import DistributionCenter, CenterTypeEnum
 from .user import User
 from .customer import Customer
 from .product import Product
