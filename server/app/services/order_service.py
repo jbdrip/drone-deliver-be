@@ -4,10 +4,13 @@ from typing import List, Tuple, Optional, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import HTTPException
+from decimal import Decimal
 from app.models import Order, OrderStatus, DistributionCenter, CenterTypeEnum, Customer, Product
 from app.schemas.api import ApiResponse
 from app.schemas.order import OrderCreate, OrderUpdate, OrderOut
+from app.schemas.distribution_center import DistributionCenterOut
 from collections import deque
+from app.core.config import settings
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
@@ -42,7 +45,7 @@ def find_route_between_points(
     target_center: Optional[DistributionCenter] = None
 ) -> Tuple[bool, List[DistributionCenter], float]:
     """
-    Encuentra la ruta más corta entre un centro de inicio y un punto objetivo usando BFS.
+    Encuentra la ruta más corta entre un centro de inicio y un punto objetivo usando BFS. (Breadth-First Search)
     
     Args:
         all_centers: Lista de todos los centros de distribución
@@ -84,9 +87,11 @@ def find_route_between_points(
         
         # Buscar centros de distribución cercanos dentro del rango
         for next_center in all_centers:
-            if next_center.id == current_center.id:
-                continue
+
+            # Evitar ciclos y no considerar el centro actual
+            if next_center.id == current_center.id: continue
                 
+            # Calcular la distancia al siguiente centro
             distance_to_next = calculate_distance(
                 float(current_center.latitude),
                 float(current_center.longitude),
@@ -100,9 +105,8 @@ def find_route_between_points(
                 new_route = current_route + [next_center]
                 
                 # Verificar si ya visitamos este centro con una ruta mejor
-                if (next_center.id not in best_routes or 
-                    new_distance < best_routes[next_center.id][1]):
-                    
+                if (next_center.id not in best_routes or new_distance < best_routes[next_center.id][1]):
+                    # Actualizar la mejor ruta para este centro
                     best_routes[next_center.id] = (new_route, new_distance)
                     
                     # Solo agregar a la cola si no hemos visitado o encontramos una ruta mejor
@@ -180,29 +184,10 @@ def find_complete_delivery_route(
         return False, [], 0.0
     
     # Combinar las rutas (evitar duplicar la bodega central)
-    complete_route = route_to_warehouse + route_to_customer[1:]  # Excluir el primer elemento de route_to_customer
+    complete_route = route_to_warehouse + route_to_customer
     total_distance = distance_to_warehouse + distance_to_customer
     
     return True, complete_route, total_distance
-
-def calculate_service_cost(distance_km: float, num_stops: int, base_rate: float = 2.5, per_km_rate: float = 1.0, stop_fee: float = 0.5) -> float:
-    """
-    Calcula el costo del servicio basado en la distancia y número de paradas.
-    """
-    base_cost = base_rate + (distance_km * per_km_rate)
-    # Fee adicional por cada parada intermedia (excluyendo el destino final)
-    stop_cost = (num_stops - 1) * stop_fee if num_stops > 1 else 0
-    return base_cost + stop_cost
-
-def estimate_delivery_time(distance_km: float, num_stops: int, drone_speed_kmh: float = 50.0, stop_time_minutes: float = 5.0) -> int:
-    """
-    Estima el tiempo de entrega en minutos considerando paradas intermedias.
-    """
-    preparation_time = 10  # minutos
-    flight_time = (distance_km / drone_speed_kmh) * 60  # solo ida en minutos
-    # Tiempo adicional por cada parada intermedia
-    stops_time = (num_stops - 1) * stop_time_minutes if num_stops > 1 else 0
-    return int(preparation_time + flight_time + stops_time)
 
 def find_nearest_distribution_center(
     db: Session, 
@@ -220,33 +205,28 @@ def find_nearest_distribution_center(
     if not active_centers:
         return None
     
+    # Inicializar variables para encontrar el centro más cercano
     nearest_center = None
-    min_distance = float('inf')
+    min_distance = float('inf') # Infinito para comparar distancias
     
     for center in active_centers:
+        # Calcular la distancia al centro actual
         distance = calculate_distance(
             float(center.latitude),
             float(center.longitude),
             customer_lat,
             customer_lon
         )
-        
+        # Verificar si es el más cercano
         if distance < min_distance:
-            min_distance = distance
-            nearest_center = center
-    
+            min_distance = distance # Actualizar la distancia mínima
+            nearest_center = center # Actualizar el centro más cercano
+
+    # Retornar el centro más cercano encontrado
     return nearest_center
 
-def create_order(db: Session, order_in: OrderCreate) -> ApiResponse:
-    # Check if the customer exists and is active
-    customer = db.query(Customer).filter(
-        Customer.id == order_in.customer_id,
-        Customer.is_active == True
-    ).first()
-    if not customer:
-        raise HTTPException(status_code=404, detail="Cliente no encontrado o inactivo")
-    
-    # Check if the product exists and is active
+def create_order(db: Session, order_in: OrderCreate, user_email: str) -> ApiResponse:
+    # Verificar si el producto existe y está activo
     product = db.query(Product).filter(
         Product.id == order_in.product_id,
         Product.is_active == True
@@ -254,7 +234,13 @@ def create_order(db: Session, order_in: OrderCreate) -> ApiResponse:
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado o inactivo")
     
-    # Find the nearest distribution center to the customer
+    # Obtener al cliente asociado al usuario
+    customer = db.query(Customer).filter(
+        Customer.email == user_email,
+        Customer.is_active == True
+    ).first()
+    
+    # Encontrar el centro de distribución más cercano al cliente
     start_distribution_center = find_nearest_distribution_center(
         db=db,
         customer_lat=float(customer.latitude),
@@ -277,30 +263,30 @@ def create_order(db: Session, order_in: OrderCreate) -> ApiResponse:
             detail="No es posible entregar el pedido: no se puede establecer una ruta desde el centro asignado hacia la bodega central y/o hacia el cliente"
         )
     
-    # Get the order status id for 'pending'
+    # Verificar si existe el estado de pedido "pending"
     pending_status = db.query(OrderStatus).filter(OrderStatus.status_name == "pending").first()
     if not pending_status:
         raise HTTPException(status_code=500, detail="Estado de pedido 'pending' no encontrado en la base de datos")
     
-    # Calculate costs and delivery time
-    product_cost = product.price * order_in.quantity
-    service_cost = calculate_service_cost(total_distance, len(delivery_route))
-    estimated_delivery_time = estimate_delivery_time(total_distance, len(delivery_route))
+    # Calcular costos y tiempo de entrega
+    product_cost = Decimal(product.price * order_in.quantity)
+    service_cost = Decimal(total_distance * settings.SERVICE_COST_PER_KM)
+    estimated_delivery_time = total_distance / settings.DEFAULT_DRONE_SPEED * 60  # en minutos
     
     # Crear información de la ruta para logs/debugging
     route_info = " -> ".join([center.name for center in delivery_route]) + f" -> Cliente"
     
-    # Create a new order
+    # Crear el pedido
     order = Order(
-        customer_id=order_in.customer_id,
+        customer_id=customer.id,
         product_id=order_in.product_id,
         quantity=order_in.quantity,
         status_id=pending_status.id,
         assigned_distribution_center_id=start_distribution_center.id,
         total_distance=round(total_distance, 2),
         service_cost=round(service_cost, 2),
-        product_cost=product_cost,
-        total_cost=product_cost + round(service_cost, 2),
+        product_cost=round(product_cost, 2),
+        total_cost=round(product_cost + service_cost, 2),
         estimated_delivery_time=estimated_delivery_time,
         # Opcional: agregar campo para guardar la ruta si lo tienes en tu modelo
         # delivery_route=route_info
@@ -310,14 +296,15 @@ def create_order(db: Session, order_in: OrderCreate) -> ApiResponse:
     db.commit()
     db.refresh(order)
     
-    # Agregar información de la ruta en la respuesta
-    response_data = OrderOut.from_orm(order)
-    # Si OrderOut tiene campos adicionales, puedes agregar la info de la ruta
-    
+    # Crear la respuesta con los datos del pedido creado
     return ApiResponse(
         status="success",
         message=f"Pedido creado exitosamente. Centro asignado: {start_distribution_center.name}. Ruta: {route_info}",
-        data=response_data
+        data={
+            "order": OrderOut.from_orm(order),
+            "assigned_distribution_center": DistributionCenterOut.from_orm(start_distribution_center),
+            "route_info": route_info,
+        }
     )
 
 def get_orders(db: Session, skip: int = 0, limit: int = 100, search: str = "") -> ApiResponse:

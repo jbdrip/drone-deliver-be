@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.api import ApiResponse
+from app.models.user import User
+from app.core.security import get_current_user
 from app.schemas.order import OrderCreate, OrderUpdate
 from app.services.order_service import (
     create_order, get_orders, update_order
@@ -10,8 +12,12 @@ from app.services.order_service import (
 router = APIRouter()
 
 @router.post("/", response_model=ApiResponse)
-def register_order(order_in: OrderCreate, db: Session = Depends(get_db)):
-    return create_order(db, order_in)
+def register_order(
+        order_in: OrderCreate,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+    ):
+    return create_order(db, order_in, current_user.email)
 
 @router.get("/", response_model=ApiResponse)
 def list_orders(

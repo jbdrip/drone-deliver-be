@@ -3,10 +3,8 @@ from uuid import UUID
 from datetime import datetime
 
 class OrderCreate(BaseModel):
-    customer_id: UUID
     product_id: UUID
     quantity: int = 1
-    assigned_distribution_center_id: UUID
 
 class OrderOut(BaseModel):
     id: UUID
