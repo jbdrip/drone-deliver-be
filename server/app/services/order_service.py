@@ -400,18 +400,28 @@ def get_orders(db: Session, current_user: User, skip: int = 0, limit: int = 100,
 
 def update_order(db: Session, order_id: str, order_update: OrderUpdate) -> ApiResponse:
     order = db.query(Order).filter(Order.id == order_id).first()
-    
     if not order:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
 
     # Update fields if provided
-    update_order = order_update.dict(exclude_unset=True, exclude_none=True)
-    if update_order:
-      for key, value in update_order.items():
-          setattr(order, key, value)
+    if order_update.product_id is not None:
+        product = db.query(Product).filter(
+            Product.id == order_update.product_id,
+            Product.is_active == True
+        ).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="Producto no encontrado o inactivo")
+            
+        order.product_id = product.id  # Actualizar id del producto
+        order.product_cost = Decimal(product.price * order_update.quantity)  # Recalcular costo del producto
+        order.total_cost = order.product_cost + order.service_cost  # Recalcular costo total
 
     db.commit()
     db.refresh(order)
+
+    order.customer_name = ""
+    order.status_name = ""
+    order.product_name = product.name
 
     return ApiResponse(
         status="success",

@@ -30,6 +30,5 @@ class OrderOut(BaseModel):
         from_attributes = True
 
 class OrderUpdate(BaseModel):
-    product_id: UUID | None = None
-    status_id: int | None = None
-    cancellation_reason: str | None = None
+    product_id: UUID
+    quantity: int = 1
