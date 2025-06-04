@@ -17,18 +17,19 @@ def register_order(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
     ):
-    return create_order(db, order_in, current_user.email)
+    return create_order(db, current_user, order_in)
 
 @router.get("/", response_model=ApiResponse)
 def list_orders(
     page: int = 1,
     limit: int = 10,
     search: str = "",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     skip = (page - 1) * limit
     if skip < 0: raise HTTPException(status_code=400, detail="Page number must be greater than 0")
-    return get_orders(db, skip=skip, limit=limit, search=search)
+    return get_orders(db, current_user, skip=skip, limit=limit, search=search)
 
 @router.put("/{order_id}", response_model=ApiResponse)
 def update_order_info(order_id: str, order_in: OrderUpdate, db: Session = Depends(get_db)):

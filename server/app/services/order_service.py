@@ -1,16 +1,15 @@
 
 import math
 import heapq
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import HTTPException
 from decimal import Decimal
-from app.models import Order, OrderStatus, DistributionCenter, CenterTypeEnum, Customer, Product
+from app.models import Order, OrderStatus, DistributionCenter, CenterTypeEnum, Customer, Product, User
 from app.schemas.api import ApiResponse
 from app.schemas.order import OrderCreate, OrderUpdate, OrderOut
 from app.schemas.distribution_center import DistributionCenterOut
-from collections import deque
 from app.core.config import settings
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -235,7 +234,7 @@ def find_nearest_distribution_center(
     # Retornar el centro más cercano encontrado
     return nearest_center
 
-def create_order(db: Session, order_in: OrderCreate, user_email: str) -> ApiResponse:
+def create_order(db: Session, current_user: User, order_in: OrderCreate) -> ApiResponse:
     # Verificar si el producto existe y está activo
     product = db.query(Product).filter(
         Product.id == order_in.product_id,
@@ -246,7 +245,7 @@ def create_order(db: Session, order_in: OrderCreate, user_email: str) -> ApiResp
     
     # Obtener al cliente asociado al usuario
     customer = db.query(Customer).filter(
-        Customer.email == user_email,
+        Customer.email == current_user.email,
         Customer.is_active == True
     ).first()
     
@@ -318,6 +317,12 @@ def create_order(db: Session, order_in: OrderCreate, user_email: str) -> ApiResp
     db.add(order)
     db.commit()
     db.refresh(order)
+
+    # Agregar los atributos faltantes para OrderOut
+    order.customer_name = customer.full_name
+    order.product_name = product.name
+    order.status_name = pending_status.status_name
+    order.assigned_distribution_center_name = start_distribution_center.name
     
     # Crear la respuesta con los datos del pedido creado
     return ApiResponse(
@@ -330,33 +335,67 @@ def create_order(db: Session, order_in: OrderCreate, user_email: str) -> ApiResp
         }
     )
 
-def get_orders(db: Session, skip: int = 0, limit: int = 100, search: str = "") -> ApiResponse:
-    query = db.query(Order)
-
+def get_orders(db: Session, current_user: User, skip: int = 0, limit: int = 100, search: str = "") -> ApiResponse:
+    # Base query con joins comunes
+    base_query = db.query(
+        Order.id,
+        Order.customer_id,
+        Customer.full_name.label('customer_name'),
+        Order.product_id,
+        Product.name.label('product_name'),
+        Order.quantity,
+        Order.status_id,
+        OrderStatus.status_name,
+        Order.assigned_distribution_center_id,
+        DistributionCenter.name.label('assigned_distribution_center_name'),
+        Order.total_distance,
+        Order.service_cost,
+        Order.product_cost,
+        Order.total_cost,
+        Order.estimated_delivery_time,
+        Order.cancellation_reason,
+        Order.created_at,
+        Order.updated_at
+    ).join(Customer, Order.customer_id == Customer.id)\
+     .join(Product, Order.product_id == Product.id)\
+     .join(OrderStatus, Order.status_id == OrderStatus.id)\
+     .outerjoin(DistributionCenter, Order.assigned_distribution_center_id == DistributionCenter.id)
+    
+    # Filtrar por cliente si no es admin
+    if current_user.role != "admin":
+        customer = db.query(Customer).filter(
+            Customer.email == current_user.email,
+            Customer.is_active == True
+        ).first()
+        
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado o inactivo")
+        
+        base_query = base_query.filter(Order.customer_id == customer.id)
+    
+    # Aplicar búsqueda si existe
     if search:
         search_term = f"%{search.lower()}%"
-        query = query.filter(
+        base_query = base_query.filter(
             or_(
-                Order.customer_id.ilike(search_term),
-                Order.product_id.ilike(search_term),
-                Order.status_id.ilike(search_term)
+                Customer.full_name.ilike(search_term),
+                Product.name.ilike(search_term),
+                OrderStatus.status_name.ilike(search_term),
+                DistributionCenter.name.ilike(search_term)
             )
         )
-
-    # Obtener el total antes de aplicar paginación
-    total = query.count()
-
-    # Aplicar paginación después de obtener el conteo
-    orders = query.offset(skip).limit(limit).all()
-    order_list = [OrderOut.from_orm(order) for order in orders]
-
+    
+    # Obtener total y aplicar paginación
+    total = base_query.count()
+    orders = base_query.offset(skip).limit(limit).all()
+    
+    # Convertir resultados usando _asdict() para mejor rendimiento
+    order_list = [OrderOut(**order._asdict()) for order in orders]
+    
     return ApiResponse(
         status="success",
         message="Pedidos obtenidos exitosamente",
-        data={
-            "total": total,
-            "orders": order_list
-        }
+        data={"total": total, "orders": order_list}
     )
 
 def update_order(db: Session, order_id: str, order_update: OrderUpdate) -> ApiResponse:

@@ -9,10 +9,14 @@ class OrderCreate(BaseModel):
 class OrderOut(BaseModel):
     id: UUID
     customer_id: UUID
+    customer_name: str
     product_id: UUID
+    product_name: str
     quantity: int
     status_id: int
+    status_name: str
     assigned_distribution_center_id: UUID | None = None
+    assigned_distribution_center_name: str | None = None
     total_distance: int | None = None
     service_cost: float | None = None
     product_cost: float | None = None
