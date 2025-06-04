@@ -1,5 +1,6 @@
 
 import math
+import heapq
 from typing import List, Tuple, Optional, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -45,7 +46,7 @@ def find_route_between_points(
     target_center: Optional[DistributionCenter] = None
 ) -> Tuple[bool, List[DistributionCenter], float]:
     """
-    Encuentra la ruta más corta entre un centro de inicio y un punto objetivo usando BFS. (Breadth-First Search)
+    Encuentra la ruta más corta entre un centro de inicio y un punto objetivo usando Dijkstra.
     
     Args:
         all_centers: Lista de todos los centros de distribución
@@ -60,17 +61,23 @@ def find_route_between_points(
         - List: Lista de centros de distribución en la ruta
         - float: Distancia total de la ruta
     """
-    # Cola para BFS: (centro_actual, ruta_hasta_ahora, distancia_acumulada)
-    queue = deque([(start_center, [start_center], 0.0)])
-    visited = set([start_center.id])
+    # Priority queue para Dijkstra: (distancia_acumulada, centro_actual, ruta_hasta_ahora)
+    pq = [(0.0, start_center.id, [start_center])]
     
-    # Diccionario para almacenar la mejor ruta a cada centro
-    best_routes: Dict[str, Tuple[List[DistributionCenter], float]] = {
-        start_center.id: ([start_center], 0.0)
-    }
+    # Diccionario para almacenar las distancias mínimas a cada centro
+    distances = {start_center.id: 0.0}
     
-    while queue:
-        current_center, current_route, current_distance = queue.popleft()
+    # Diccionario para mapear IDs a objetos DistributionCenter
+    center_map = {center.id: center for center in all_centers}
+    
+    while pq:
+        current_distance, current_center_id, current_route = heapq.heappop(pq)
+        
+        # Si ya encontramos una ruta más corta a este centro, saltamos
+        if current_distance > distances.get(current_center_id, float('inf')):
+            continue
+            
+        current_center = center_map[current_center_id]
         
         # Verificar si desde el centro actual se puede llegar al objetivo
         distance_to_target = calculate_distance(
@@ -85,11 +92,11 @@ def find_route_between_points(
             total_distance = current_distance + distance_to_target
             return True, current_route, total_distance
         
-        # Buscar centros de distribución cercanos dentro del rango
+        # Explorar centros de distribución cercanos dentro del rango
         for next_center in all_centers:
-
             # Evitar ciclos y no considerar el centro actual
-            if next_center.id == current_center.id: continue
+            if next_center.id == current_center.id:
+                continue
                 
             # Calcular la distancia al siguiente centro
             distance_to_next = calculate_distance(
@@ -102,17 +109,12 @@ def find_route_between_points(
             # Verificar si el centro siguiente está dentro del rango del actual
             if distance_to_next <= current_center.max_drone_range:
                 new_distance = current_distance + distance_to_next
-                new_route = current_route + [next_center]
                 
-                # Verificar si ya visitamos este centro con una ruta mejor
-                if (next_center.id not in best_routes or new_distance < best_routes[next_center.id][1]):
-                    # Actualizar la mejor ruta para este centro
-                    best_routes[next_center.id] = (new_route, new_distance)
-                    
-                    # Solo agregar a la cola si no hemos visitado o encontramos una ruta mejor
-                    if next_center.id not in visited or new_distance < current_distance:
-                        queue.append((next_center, new_route, new_distance))
-                        visited.add(next_center.id)
+                # Solo procesar si encontramos una ruta más corta
+                if new_distance < distances.get(next_center.id, float('inf')):
+                    distances[next_center.id] = new_distance
+                    new_route = current_route + [next_center]
+                    heapq.heappush(pq, (new_distance, next_center.id, new_route))
     
     # No se encontró una ruta válida
     return False, [], 0.0
@@ -136,6 +138,11 @@ def find_complete_delivery_route(
     all_centers = db.query(DistributionCenter).filter(
         DistributionCenter.is_active == True
     ).all()
+
+    # imprimir todos los centros para debugging
+    print("Centros de distribución activos:")
+    for center in all_centers:
+        print(f"{center.name} (ID: {center.id}, Lat: {center.latitude}, Lon: {center.longitude})")
     
     # Encontrar la bodega central (main_warehouse)
     main_warehouse = db.query(DistributionCenter).filter(
@@ -180,6 +187,9 @@ def find_complete_delivery_route(
         target_lon=customer_lon
     )
     
+    # Imprimir la ruta de la bodega central al cliente
+    print(" -> ".join([center.name for center in route_to_customer]) + f" -> Cliente\n\n\n\n")
+
     if not can_reach_customer:
         return False, [], 0.0
     
