@@ -402,6 +402,11 @@ def update_order(db: Session, order_id: str, order_update: OrderUpdate) -> ApiRe
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    
+    # Verificar si el pedido se encuentra en estado "pending"
+    order_status = db.query(OrderStatus).filter(OrderStatus.id == order.status_id).first()
+    if order_status.status_name != "pending":
+        raise HTTPException(status_code=400, detail="Solo se pueden editar pedidos en estado 'Pendiente'")
 
     # Update fields if provided
     if order_update.product_id is not None:
