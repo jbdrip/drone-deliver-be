@@ -411,7 +411,8 @@ def get_orders(db: Session, current_user: User, skip: int = 0, limit: int = 100,
         data={"total": total, "orders": order_list}
     )
 
-def update_order(db: Session, order_id: str, order_update: OrderUpdate) -> ApiResponse:
+def update_order(db: Session, current_user: User, order_id: str, order_update: OrderUpdate) -> ApiResponse:
+    # Obtener el pedido por ID y verificar si existe
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
@@ -420,8 +421,20 @@ def update_order(db: Session, order_id: str, order_update: OrderUpdate) -> ApiRe
     order_status = db.query(OrderStatus).filter(OrderStatus.id == order.status_id).first()
     if order_status.status_name != "pending":
         raise HTTPException(status_code=400, detail="Solo se pueden editar pedidos en estado 'Pendiente'")
+    
+    # Verificar si el usuario tiene un cliente asociado
+    customer = db.query(Customer).filter(
+        Customer.email == current_user.email,
+        Customer.is_active == True
+    ).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado o inactivo")
+    
+    # Verificar si el pedido pertenece al cliente
+    if order.customer_id != customer.id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para editar este pedido")
 
-    # Update fields if provided
+    # Actualizar producto y cantidad del pedido
     if order_update.product_id is not None:
         product = db.query(Product).filter(
             Product.id == order_update.product_id,
@@ -434,15 +447,91 @@ def update_order(db: Session, order_id: str, order_update: OrderUpdate) -> ApiRe
         order.product_cost = Decimal(product.price * order_update.quantity)  # Recalcular costo del producto
         order.total_cost = order.product_cost + order.service_cost  # Recalcular costo total
 
+    # Guardar los cambios en la base de datos
     db.commit()
     db.refresh(order)
 
-    order.customer_name = ""
-    order.status_name = ""
+    # Agregar los atributos faltantes para OrderOut
+    order.customer_name = customer.full_name
+    order.status_name = order_status.status_name
     order.product_name = product.name
 
     return ApiResponse(
         status="success",
         message="Pedido actualizado exitosamente",
+        data=OrderOut.from_orm(order)
+    )
+
+def confirm_order(db: Session, current_user: User, order_id: str) -> ApiResponse:
+    # Obtener el pedido por ID y verificar si existe
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    
+    # Verificar si el pedido se encuentra en estado "pending"
+    order_status = db.query(OrderStatus).filter(OrderStatus.id == order.status_id).first()
+    if order_status.status_name != "pending":
+        raise HTTPException(status_code=400, detail="Solo se pueden confirmar pedidos en estado 'Pendiente'")
+    
+    # Verificar si el usuario tiene un cliente asociado
+    customer = db.query(Customer).filter(
+        Customer.email == current_user.email,
+        Customer.is_active == True
+    ).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado o inactivo")
+    
+    # Verificar si el pedido pertenece al cliente
+    if order.customer_id != customer.id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para confirmar este pedido")
+    
+    # Verificar si el producto existe y si hay stock disponible del producto
+    product = db.query(Product).filter(
+        Product.id == order.product_id,
+        Product.is_active == True
+    ).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado o inactivo")
+    if product.stock_quantity < order.quantity:
+        raise HTTPException(status_code=400, detail="No hay suficiente stock del producto para confirmar el pedido")
+    
+    # Verificar si el cliente existe y si cuenta con suficientes fondos
+    customer = db.query(Customer).filter(
+        Customer.id == order.customer_id,
+        Customer.is_active == True
+    ).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado o inactivo")
+    if customer.credit_balance < order.total_cost:
+        raise HTTPException(status_code=400, detail="El cliente no tiene suficientes fondos para confirmar el pedido")
+    
+    # Actualizar el stock del producto
+    product.stock_quantity -= order.quantity
+
+    # Actualizar el balance del cliente
+    customer.credit_balance -= order.total_cost
+    
+    # Cambiar el estado del pedido a "confirmed"
+    confirmed_status = db.query(OrderStatus).filter(OrderStatus.status_name == "confirmed").first()
+    if not confirmed_status:
+        raise HTTPException(status_code=500, detail="Estado de pedido 'confirmed' no encontrado en la base de datos")
+    
+    # Actualizar el pedido
+    order.status_id = confirmed_status.id
+
+    # Guardar los cambios en la base de datos
+    db.commit()
+    db.refresh(product)
+    db.refresh(customer)
+    db.refresh(order)
+
+    # Agregar los atributos faltantes para OrderOut
+    order.customer_name = customer.full_name
+    order.product_name = product.name
+    order.status_name = confirmed_status.status_name
+
+    return ApiResponse(
+        status="success",
+        message="Pedido confirmado exitosamente",
         data=OrderOut.from_orm(order)
     )

@@ -34,3 +34,6 @@ class OrderOut(BaseModel):
 class OrderUpdate(BaseModel):
     product_id: UUID
     quantity: int = 1
+
+class OrderCancel(BaseModel):
+    cancellation_reason: str
