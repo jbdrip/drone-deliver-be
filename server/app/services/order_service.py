@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from decimal import Decimal
 from app.models import Order, OrderStatus, DistributionCenter, CenterTypeEnum, Customer, Product, User
 from app.schemas.api import ApiResponse
-from app.schemas.order import OrderCreate, OrderUpdate, OrderOut
+from app.schemas.order import OrderCreate, OrderUpdate, OrderCancel, OrderOut
 from app.schemas.distribution_center import DistributionCenterOut
 from app.core.config import settings
 
@@ -137,11 +137,6 @@ def find_complete_delivery_route(
     all_centers = db.query(DistributionCenter).filter(
         DistributionCenter.is_active == True
     ).all()
-
-    # imprimir todos los centros para debugging
-    print("Centros de distribución activos:")
-    for center in all_centers:
-        print(f"{center.name} (ID: {center.id}, Lat: {center.latitude}, Lon: {center.longitude})")
     
     # Encontrar la bodega central (main_warehouse)
     main_warehouse = db.query(DistributionCenter).filter(
@@ -185,9 +180,6 @@ def find_complete_delivery_route(
         target_lat=customer_lat,
         target_lon=customer_lon
     )
-    
-    # Imprimir la ruta de la bodega central al cliente
-    print(" -> ".join([center.name for center in route_to_customer]) + f" -> Cliente\n\n\n\n")
 
     if not can_reach_customer:
         return False, [], 0.0
@@ -533,5 +525,96 @@ def confirm_order(db: Session, current_user: User, order_id: str) -> ApiResponse
     return ApiResponse(
         status="success",
         message="Pedido confirmado exitosamente",
+        data=OrderOut.from_orm(order)
+    )
+
+def deliver_order(db: Session, current_user: User, order_id: str) -> ApiResponse:
+    # Obtener el pedido por ID y verificar si existe
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    
+    # Verificar si el pedido se encuentra en estado "confirmed"
+    order_status = db.query(OrderStatus).filter(OrderStatus.id == order.status_id).first()
+    if order_status.status_name != "confirmed":
+        raise HTTPException(status_code=400, detail="Solo se pueden entregar pedidos en estado 'Confirmado'")
+    
+    # Verificar si el usuario es un administrador
+    if not current_user.role == "admin":
+        raise HTTPException(status_code=403, detail="Solo los administradores pueden entregar pedidos")
+    
+    # Actualizar el estado del pedido a "delivered"
+    delivered_status = db.query(OrderStatus).filter(OrderStatus.status_name == "delivered").first()
+    if not delivered_status:
+        raise HTTPException(status_code=500, detail="Estado de pedido 'delivered' no encontrado en la base de datos")
+    
+    # Actualizar el pedido
+    order.status_id = delivered_status.id
+
+    # Guardar los cambios en la base de datos
+    db.commit()
+    db.refresh(order)
+
+    # Agregar los atributos faltantes para OrderOut
+    order.customer_name = db.query(Customer).filter(Customer.id == order.customer_id).first().full_name
+    order.product_name = db.query(Product).filter(Product.id == order.product_id).first().name
+    order.status_name = delivered_status.status_name
+
+    return ApiResponse(
+        status="success",
+        message="Pedido entregado exitosamente",
+        data=OrderOut.from_orm(order)
+    )
+
+def cancel_order(db: Session, current_user: User, order_id: str, order_in: OrderCancel) -> ApiResponse:
+    # Obtener el pedido por ID y verificar si existe
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    
+    # Verificar si el pedido se encuentra en estado "pending"
+    order_status = db.query(OrderStatus).filter(OrderStatus.id == order.status_id).first()
+    if order_status.status_name != "pending":
+        raise HTTPException(status_code=400, detail="Solo se pueden cancelar pedidos en estado 'Pendiente'")
+    
+    # Verificar si el usuario tiene un cliente asociado
+    customer = db.query(Customer).filter(
+        Customer.email == current_user.email,
+        Customer.is_active == True
+    ).first()
+    if not customer and not current_user.role == "admin":
+        raise HTTPException(status_code=404, detail="Cliente no encontrado o inactivo")
+    
+    # Verificar si el pedido pertenece al cliente
+    if (customer and order.customer_id != customer.id) or not current_user.role == "admin":
+        raise HTTPException(status_code=403, detail="No tienes permiso para cancelar este pedido")
+    
+    # Actualizar el estado del pedido a "canceled"
+    canceled_status = db.query(OrderStatus).filter(OrderStatus.status_name == "cancelled").first()
+    if not canceled_status:
+        raise HTTPException(status_code=500, detail="Estado de pedido 'canceled' no encontrado en la base de datos")
+    
+    # Actualizar el pedido
+    order.status_id = canceled_status.id
+    order.cancellation_reason = order_in.cancellation_reason
+    
+    # Guardar los cambios en la base de datos
+    db.commit()
+    db.refresh(order)
+
+    #Obtener el producto asociado al pedido
+    product = db.query(Product).filter(
+        Product.id == order.product_id,
+        Product.is_active == True
+    ).first()
+
+    # Agregar los atributos faltantes para OrderOut
+    order.customer_name = customer.full_name if customer else ""
+    order.product_name = product.name
+    order.status_name = canceled_status.status_name
+
+    return ApiResponse(
+        status="success",
+        message="Pedido cancelado exitosamente",
         data=OrderOut.from_orm(order)
     )

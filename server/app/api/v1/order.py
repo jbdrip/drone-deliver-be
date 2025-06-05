@@ -4,9 +4,9 @@ from app.core.database import get_db
 from app.schemas.api import ApiResponse
 from app.models.user import User
 from app.core.security import get_current_user
-from app.schemas.order import OrderCreate, OrderUpdate
+from app.schemas.order import OrderCreate, OrderUpdate, OrderCancel
 from app.services.order_service import (
-    create_order, get_orders, update_order, confirm_order
+    create_order, get_orders, update_order, confirm_order, deliver_order, cancel_order
 )
 
 router = APIRouter()
@@ -40,7 +40,6 @@ def update_order_info(
     ):
     return update_order(db, current_user, order_id, order_in)
 
-# Confirm endpoint
 @router.patch("/{order_id}/confirm", response_model=ApiResponse)
 def confirm_order_info(
         order_id: str,
@@ -48,3 +47,20 @@ def confirm_order_info(
         current_user: User = Depends(get_current_user)
     ):
     return confirm_order(db, current_user, order_id)
+
+@router.patch("/{order_id}/deliver", response_model=ApiResponse)
+def deliver_order_info(
+        order_id: str,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+    ):
+    return deliver_order(db, current_user, order_id=order_id)
+
+@router.patch("/{order_id}/cancel", response_model=ApiResponse)
+def cancel_order_info(
+        order_id: str,
+        order_in: OrderCancel,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+    ):
+    return cancel_order(db, current_user, order_id, order_in)
