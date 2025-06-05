@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
+from typing import List, Dict, Any
 
 class OrderCreate(BaseModel):
     product_id: UUID
@@ -22,6 +23,7 @@ class OrderOut(BaseModel):
     product_cost: float | None = None
     total_cost: float | None = None
     estimated_delivery_time: int | None = None
+    delivery_route: List[Dict[str, Any]] | None = None
     cancellation_reason: str | None = None
     created_at: datetime
     updated_at: datetime

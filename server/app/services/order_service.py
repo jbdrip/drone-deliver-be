@@ -389,8 +389,21 @@ def get_orders(db: Session, current_user: User, skip: int = 0, limit: int = 100,
     total = base_query.count()
     orders = base_query.offset(skip).limit(limit).all()
     
-    # Convertir resultados usando _asdict() para mejor rendimiento
-    order_list = [OrderOut(**order._asdict()) for order in orders]
+    # Obtener delivery_route por separado para cada pedido
+    order_ids = [order.id for order in orders]
+    delivery_routes = {}
+    
+    if order_ids:
+        routes_query = db.query(Order.id, Order.delivery_route).filter(Order.id.in_(order_ids))
+        for order_id, route in routes_query:
+            delivery_routes[order_id] = route
+    
+    # Convertir resultados y agregar delivery_route
+    order_list = []
+    for order in orders:
+        order_dict = order._asdict()
+        order_dict['delivery_route'] = delivery_routes.get(order.id, [])
+        order_list.append(OrderOut(**order_dict))
     
     return ApiResponse(
         status="success",
