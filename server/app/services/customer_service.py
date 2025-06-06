@@ -38,6 +38,21 @@ def create_customer(db: Session, customer_in: CustomerCreate) -> ApiResponse:
         data=CustomerOut.from_orm(customer)
     )
 
+def get_customer_by_email(db: Session, customer_email: str) -> ApiResponse:
+    customer = db.query(Customer).filter(
+        Customer.email == customer_email,
+        Customer.is_active == True
+    ).first()
+    
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    return ApiResponse(
+        status="success",
+        message="Cliente encontrado",
+        data=CustomerOut.from_orm(customer)
+    )
+
 def get_customers(db: Session, skip: int = 0, limit: int = 100, search: str = "") -> ApiResponse:
     query = db.query(Customer).filter(Customer.is_active == True)
 
