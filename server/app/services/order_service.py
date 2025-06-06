@@ -379,6 +379,11 @@ def get_orders(db: Session, current_user: User, skip: int = 0, limit: int = 100,
     
     # Obtener total y aplicar paginación
     total = base_query.count()
+
+    # Aplicar ordenamiento
+    base_query = base_query.order_by(Order.created_at.desc())
+        
+    # Aplicar paginación
     orders = base_query.offset(skip).limit(limit).all()
     
     # Obtener delivery_route por separado para cada pedido

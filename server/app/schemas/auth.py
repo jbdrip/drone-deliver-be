@@ -13,6 +13,13 @@ class RegisterReq(BaseModel):
     latitude: float
     longitude: float
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordReset(BaseModel):
+    token: str
+    new_password: str
+
 class Token(BaseModel):
     access_token: str
     refresh_token: str
