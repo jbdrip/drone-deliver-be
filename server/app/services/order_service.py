@@ -11,6 +11,7 @@ from app.schemas.api import ApiResponse
 from app.schemas.order import OrderCreate, OrderUpdate, OrderCancel, OrderOut
 from app.schemas.distribution_center import DistributionCenterOut
 from app.core.config import settings
+from datetime import datetime, timedelta
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
@@ -235,17 +236,25 @@ def create_order(db: Session, current_user: User, order_in: OrderCreate) -> ApiR
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado o inactivo")
     
-    # Obtener al cliente asociado al usuario
+    # Obtener al cliente asociado al usuario 
     customer = db.query(Customer).filter(
-        Customer.email == current_user.email,
-        Customer.is_active == True
-    ).first()
+            Customer.email == current_user.email,
+            Customer.is_active == True
+        ).first()
+
+    # Verificar si viene la latitud y longitud
+    if order_in.latitude is None or order_in.longitude is None:
+        customer_lat = float(customer.latitude)
+        customer_lon = float(customer.longitude)
+    else:
+        customer_lat = order_in.latitude
+        customer_lon = order_in.longitude
     
     # Encontrar el centro de distribución más cercano al cliente
     start_distribution_center = find_nearest_distribution_center(
         db=db,
-        customer_lat=float(customer.latitude),
-        customer_lon=float(customer.longitude)
+        customer_lat=customer_lat,
+        customer_lon=customer_lon
     )
     if not start_distribution_center:
         raise HTTPException(status_code=404, detail="No hay centros de distribución activos disponibles")
@@ -254,8 +263,8 @@ def create_order(db: Session, current_user: User, order_in: OrderCreate) -> ApiR
     can_deliver, delivery_route, total_distance = find_complete_delivery_route(
         db=db,
         start_center=start_distribution_center,
-        customer_lat=float(customer.latitude),
-        customer_lon=float(customer.longitude)
+        customer_lat=customer_lat,
+        customer_lon=customer_lon
     )
     
     if not can_deliver:
@@ -271,7 +280,17 @@ def create_order(db: Session, current_user: User, order_in: OrderCreate) -> ApiR
     
     # Calcular costos y tiempo de entrega
     product_cost = Decimal(product.price * order_in.quantity)
-    service_cost = Decimal(total_distance * settings.SERVICE_COST_PER_KM)
+
+    # Obtener la hora actual y verificar si es despues de las 3 de la tarde hora de guatemala
+    current_time = datetime.utcnow() + timedelta(hours=-6)  # Ajustar a hora de Guatemala
+    is_after_hour = current_time.hour >= 15  # 3 PM en hora de Guatemala
+    if is_after_hour:
+        # Si es después de las 3 PM, aplicar costo adicional
+        service_cost_per_km = settings.SERVICE_COST_AFTER_HOUR_PER_KM
+    else:
+        service_cost_per_km = settings.SERVICE_COST_PER_KM
+
+    service_cost = Decimal(total_distance * service_cost_per_km)
     estimated_delivery_time = total_distance / settings.DEFAULT_DRONE_SPEED * 60  # en minutos
     
     # Crear información de la ruta para logs/debugging
@@ -287,8 +306,8 @@ def create_order(db: Session, current_user: User, order_in: OrderCreate) -> ApiR
     delivery_route_map.append({
         "center_id": "customer",
         "center_name": "Cliente",
-        "latitude": float(customer.latitude),
-        "longitude": float(customer.longitude)
+        "latitude": customer_lat,
+        "longitude": customer_lon
     })
     
     # Crear el pedido

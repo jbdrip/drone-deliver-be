@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     DEFAULT_DRONE_SPEED: int = 50  # km/h
     DEFAULT_DRONE_RANGE: int = 10000  # metros
     SERVICE_COST_PER_KM: float = 2.5  # costo por kilómetro
+    SERVICE_COST_AFTER_HOUR_PER_KM: float = 5.0  # costo por kilómetro después de la primera hora
     
     @property
     def cors_origins_list(self) -> List[str]:

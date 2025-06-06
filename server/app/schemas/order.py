@@ -6,6 +6,8 @@ from typing import List, Dict, Any
 class OrderCreate(BaseModel):
     product_id: UUID
     quantity: int = 1
+    latitude: float | None = None
+    longitude: float | None = None
 
 class OrderOut(BaseModel):
     id: UUID
